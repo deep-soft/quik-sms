@@ -178,10 +178,15 @@ class ComposeViewModel @Inject constructor(
                 // monitors convos and triggers when wanted convo is present
                 conversationRepo.getConversations(false)
                     .asObservable()
-                    .filter { conversations -> conversations.isLoaded }
+                    .filter { conversations -> conversations.isLoaded && conversations.isValid}
                     .mapNotNull { conversationRepo.getConversation(addresses) }
                     .doOnNext { newState { copy(loading = false) } }
-                }
+            }
+            .doOnError { e ->
+                Timber.e(e, "Error while resolving conversation")
+                newState { copy(loading = false) }
+            }
+
 
         // Merges two potential conversation sources (constructor threadId and contact selection)
         // into a single stream of conversations. If the conversation was deleted, notify the
@@ -471,7 +476,7 @@ class ComposeViewModel @Inject constructor(
                         context.getString(R.string.messages_text_share_file_error),
                         Toast.LENGTH_LONG
                     ).show().also {
-                        Timber.e("Error writing to messages text cache file", e)
+                        Timber.e(e, "Error writing to messages text cache file")
                     }
                 else
                     Timber.d("Created and shared messages text file: $filename")
@@ -753,6 +758,23 @@ class ComposeViewModel @Inject constructor(
         view.messageLinkAskIntent
             .autoDisposable(view.scope())
             .subscribe { view.showMessageLinkAskDialog(it) }
+
+        // Show reaction details popup
+        view.reactionClickIntent
+            .mapNotNull { messageId -> messageRepo.getMessage(messageId) }
+            .withLatestFrom(conversation) { message, conv ->
+                message.emojiReactions.map { reaction ->
+                    val contactName = conv.recipients
+                        .firstOrNull { recipient ->
+                            phoneNumberUtils.compare(recipient.address, reaction.senderAddress)
+                        }
+                        ?.getDisplayName()
+                        ?: reaction.senderAddress
+                    "${reaction.emoji} $contactName"
+                }
+            }
+            .autoDisposable(view.scope())
+            .subscribe { reactions -> view.showReactionsDialog(reactions) }
 
         // Set the current conversation
         Observables

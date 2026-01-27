@@ -49,7 +49,9 @@ import dev.octoshrimpy.quik.manager.ActiveConversationManager
 import dev.octoshrimpy.quik.manager.NotificationManager
 import dev.octoshrimpy.quik.manager.ShortcutManager
 import dev.octoshrimpy.quik.receiver.MessageSentReceiver
+import dev.octoshrimpy.quik.repository.ContactRepository
 import dev.octoshrimpy.quik.repository.ConversationRepository
+import dev.octoshrimpy.quik.repository.MessageContentFilterRepository
 import dev.octoshrimpy.quik.repository.MessageRepository
 import dev.octoshrimpy.quik.repository.SyncRepository
 import dev.octoshrimpy.quik.util.Preferences
@@ -84,6 +86,8 @@ class ReceiveMmsWorker(appContext: Context, workerParams: WorkerParameters)
     @Inject lateinit var notificationManager: NotificationManager
     @Inject lateinit var updateBadge: UpdateBadge
     @Inject lateinit var shortcutManager: ShortcutManager
+    @Inject lateinit var filterRepo: MessageContentFilterRepository
+    @Inject lateinit var contactsRepo: ContactRepository
 
     override fun doWork(): Result {
         Timber.v("started")
@@ -183,6 +187,13 @@ class ReceiveMmsWorker(appContext: Context, workerParams: WorkerParameters)
                             else -> Unit
                         }
 
+                        val messageFilterAction = filterRepo.isBlocked(message.getText(), message.address, contactsRepo)
+                        if (messageFilterAction) {
+                            Timber.v("message dropped based on content filters")
+                            messageRepo.deleteMessages(listOf(message.id))
+                            return Result.failure(inputData)
+                        }
+
                         // update the conversation
                         conversationRepo.updateConversations(listOf(message.threadId))
                         val conversation =
@@ -274,7 +285,7 @@ class ReceiveMmsWorker(appContext: Context, workerParams: WorkerParameters)
             }
             Timber.v("notify send file $fileName")
         } catch (e: Exception) {
-            Timber.e("error writing notify send file", e)
+            Timber.e(e, "error writing notify send file")
         }
 
         val useWapMmsc = com.android.mms.MmsConfig.getNotifyWapMMSC()
@@ -318,7 +329,7 @@ class ReceiveMmsWorker(appContext: Context, workerParams: WorkerParameters)
                 sendResponsePdu(context, subscriptionId, notificationInd.contentLocation, pdu)
             }
         } catch (e: Exception) {
-            Timber.e("error creating m-acknowledge.ind", e)
+            Timber.e(e, "error creating m-acknowledge.ind")
         }
     }
 
@@ -341,7 +352,7 @@ class ReceiveMmsWorker(appContext: Context, workerParams: WorkerParameters)
                 sendResponsePdu(context, subscriptionId, notificationInd.contentLocation, pdu)
             }
         } catch (e: Exception) {
-            Timber.e("error creating m-notifyresp.ind", e)
+            Timber.e(e, "error creating m-notifyresp.ind")
         }
     }
 

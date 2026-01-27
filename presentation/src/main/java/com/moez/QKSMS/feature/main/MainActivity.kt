@@ -99,6 +99,7 @@ class MainActivity : QkThemedActivity(), MainView {
                 backup.clicks().map { NavItem.BACKUP },
                 scheduled.clicks().map { NavItem.SCHEDULED },
                 blocking.clicks().map { NavItem.BLOCKING },
+                messageUtils.clicks().map { NavItem.MESSAGE_UTILS },
                 settings.clicks().map { NavItem.SETTINGS },
 //                plus.clicks().map { NavItem.PLUS },
 //                help.clicks().map { NavItem.HELP },
@@ -330,6 +331,17 @@ class MainActivity : QkThemedActivity(), MainView {
 
             is SyncRepository.SyncProgress.Running -> {
                 syncing.isVisible = true
+                syncingProgress.max = state.syncing.max
+                progressAnimator.apply {
+                    setIntValues(syncingProgress.progress, state.syncing.progress)
+                }.start()
+                syncingProgress.isIndeterminate = state.syncing.indeterminate
+                snackbar.isVisible = false
+            }
+
+            is SyncRepository.SyncProgress.ParsingEmojis -> {
+                syncing.isVisible = true
+                syncingLabel.setText(getString(R.string.main_sync_emojis))
                 syncingProgress.max = state.syncing.max
                 progressAnimator.apply {
                     setIntValues(syncingProgress.progress, state.syncing.progress)
